@@ -47,6 +47,12 @@ type CreateUserRequest struct {
 	Role     string `json:"role"`
 }
 
+type RegisterUserRequest struct {
+	Name     string `json:"name"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
 type CreateSaleRequest struct {
 	UserID int64      `json:"userId"`
 	Items  []SaleItem `json:"items"`

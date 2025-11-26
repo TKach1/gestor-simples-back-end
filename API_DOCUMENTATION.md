@@ -39,6 +39,39 @@ Recurso para autenticar usuários e gerar tokens de acesso.
     }
     ```
 
+### **`POST /auth/register`**
+
+-   **Descrição:** Registra um novo usuário (vendedor).
+-   **Corpo da Requisição (`application/json`):**
+    ```json
+    {
+      "name": "Novo Vendedor",
+      "username": "novo.vendedor",
+      "password": "password123"
+    }
+    ```
+-   **Resposta de Sucesso (`201 Created`):** Retorna os dados do usuário recém-criado.
+    ```json
+    {
+      "id": 5,
+      "name": "Novo Vendedor",
+      "username": "novo.vendedor",
+      "role": "vendedor"
+    }
+    ```
+-   **Resposta de Erro (`400 Bad Request`):**
+    ```json
+    {
+      "error": "Invalid request payload"
+    }
+    ```
+-   **Resposta de Erro (`500 Internal Server Error`):**
+    ```json
+    {
+      "error": "Failed to create user"
+    }
+    ```
+
 ---
 
 ## 2. Usuários (Vendedores)

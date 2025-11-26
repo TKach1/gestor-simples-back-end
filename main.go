@@ -31,6 +31,7 @@ func main() {
 
 	// Authentication routes
 	api.HandleFunc("/auth/login", loginHandler).Methods("POST")
+	api.HandleFunc("/auth/register", registerHandler).Methods("POST")
 
 	// User routes
 	userRouter := api.PathPrefix("/users").Subrouter()
@@ -118,6 +119,43 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 
 	respondWithJSON(w, http.StatusOK, map[string]interface{}{"token": token, "user": user})
 }
+
+func registerHandler(w http.ResponseWriter, r *http.Request) {
+	var req models.RegisterUserRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondWithError(w, http.StatusBadRequest, "Invalid request payload")
+		return
+	}
+
+	hashedPassword, err := auth.HashPassword(req.Password)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Failed to hash password")
+		return
+	}
+
+	var userID int64
+	// Default role is 'vendedor'
+	err = database.DB.QueryRow(
+		"INSERT INTO users (name, username, password_hash, role) VALUES ($1, $2, $3, 'vendedor') RETURNING id",
+		req.Name, req.Username, hashedPassword,
+	).Scan(&userID)
+
+	if err != nil {
+		// You might want to check for specific errors, like duplicate username
+		respondWithError(w, http.StatusInternalServerError, "Failed to create user")
+		return
+	}
+
+	user := models.User{
+		ID:       userID,
+		Name:     req.Name,
+		Username: req.Username,
+		Role:     "vendedor",
+	}
+
+	respondWithJSON(w, http.StatusCreated, user)
+}
+
 
 // --- User Handlers ---
 
