@@ -18,7 +18,7 @@ func main() {
 	// Load .env file
 	err := godotenv.Load()
 	if err != nil {
-		log.Fatalf("Error loading .env file: %v", err)
+		log.Println("No .env file found, relying on environment variables")
 	}
 	
 	// Initialize packages
