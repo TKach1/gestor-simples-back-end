@@ -1,12 +1,15 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
 	"gestor-simples-ecs/internal/database"
 	"gestor-simples-ecs/internal/models"
 	"gestor-simples-ecs/pkg/auth"
 	"log"
 	"net/http"
+	"sort"
+	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/joho/godotenv"
@@ -361,25 +364,78 @@ func deleteProductHandler(w http.ResponseWriter, r *http.Request) {
 
 // --- Sales Handlers ---
 func getSalesHandler(w http.ResponseWriter, r *http.Request) {
-    // In a real app, you would add filtering by user, date range, etc.
-    rows, err := database.DB.Query("SELECT id, user_id, date FROM sales")
-    if err != nil {
-        respondWithError(w, http.StatusInternalServerError, "Failed to query sales")
-        return
-    }
-    defer rows.Close()
+	query := `
+		SELECT 
+			s.id, s.user_id, s.date,
+			si.product_id, si.quantity,
+			p.name, p.price
+		FROM sales s
+		LEFT JOIN sales_items si ON s.id = si.sale_id
+		LEFT JOIN products p ON si.product_id = p.id
+		ORDER BY s.date DESC;
+	`
 
-    sales := []models.Sale{}
-    for rows.Next() {
-        var s models.Sale
-        if err := rows.Scan(&s.ID, &s.UserID, &s.Date); err != nil {
-            respondWithError(w, http.StatusInternalServerError, "Failed to scan sale")
-            return
-        }
-        sales = append(sales, s)
-    }
+	rows, err := database.DB.Query(query)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Failed to query sales")
+		return
+	}
+	defer rows.Close()
 
-    respondWithJSON(w, http.StatusOK, sales)
+	salesMap := make(map[int64]*models.Sale)
+	for rows.Next() {
+		var (
+			saleID       int64
+			userID       int64
+			saleDate     time.Time
+			productID    sql.NullInt64 // Use sql.Null types for LEFT JOIN
+			quantity     sql.NullInt32
+			productName  sql.NullString
+			productPrice sql.NullFloat64
+		)
+
+		if err := rows.Scan(&saleID, &userID, &saleDate, &productID, &quantity, &productName, &productPrice); err != nil {
+			respondWithError(w, http.StatusInternalServerError, "Failed to scan sale data")
+			return
+		}
+
+		// Check if the sale is already in the map
+		sale, ok := salesMap[saleID]
+		if !ok {
+			sale = &models.Sale{
+				ID:         saleID,
+				UserID:     userID,
+				Date:       saleDate,
+				Items:      []models.SaleItem{},
+				TotalPrice: 0,
+			}
+			salesMap[saleID] = sale
+		}
+
+		// Add item if it exists
+		if productID.Valid {
+			item := models.SaleItem{
+				ProductID:   productID.Int64,
+				ProductName: productName.String,
+				Quantity:    int(quantity.Int32),
+				UnitPrice:   productPrice.Float64,
+			}
+			sale.Items = append(sale.Items, item)
+			sale.TotalPrice += float64(item.Quantity) * item.UnitPrice
+		}
+	}
+
+	// Convert map to slice
+	sales := make([]models.Sale, 0, len(salesMap))
+	for _, sale := range salesMap {
+		sales = append(sales, *sale)
+	}
+    // As salesMap doesn't keep the order, we should sort it again
+    sort.Slice(sales, func(i, j int) bool {
+        return sales[i].Date.After(sales[j].Date)
+    })
+
+	respondWithJSON(w, http.StatusOK, sales)
 }
 
 func createSaleHandler(w http.ResponseWriter, r *http.Request) {

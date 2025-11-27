@@ -250,7 +250,7 @@ Endpoints para registrar e consultar vendas.
 
 -   **Descrição:** Retorna o histórico de vendas. Pode ser filtrado.
 -   **Query Params (Opcional):**
-    -   `vendedorId` (number): Filtra vendas por um vendedor específico.
+    -   `userId` (number): Filtra vendas por um vendedor específico.
     -   `startDate` (date): Data de início do período (formato `YYYY-MM-DD`).
     -   `endDate` (date): Data de fim do período (formato `YYYY-MM-DD`).
 -   **Resposta de Sucesso (`200 OK`):**
@@ -258,7 +258,7 @@ Endpoints para registrar e consultar vendas.
     [
       {
         "id": 1,
-        "vendedorId": 2,
+        "userId": 2,
         "date": "2025-11-20T14:30:00Z",
         "items": [
           {
@@ -266,9 +266,15 @@ Endpoints para registrar e consultar vendas.
             "productName": "Produto A",
             "quantity": 2,
             "unitPrice": 32.50
+          },
+          {
+            "productId": 2,
+            "productName": "Produto B",
+            "quantity": 1,
+            "unitPrice": 199.90
           }
         ],
-        "total": 65.00
+        "totalPrice": 264.90
       }
     ]
     ```
@@ -279,7 +285,7 @@ Endpoints para registrar e consultar vendas.
 -   **Corpo da Requisição (`application/json`):**
     ```json
     {
-      "vendedorId": 2,
+      "userId": 2,
       "items": [
         {
           "productId": 1,
@@ -295,24 +301,7 @@ Endpoints para registrar e consultar vendas.
 -   **Resposta de Sucesso (`201 Created`):**
     ```json
     {
-      "id": 2,
-      "vendedorId": 2,
-      "date": "2025-11-23T18:00:00Z",
-      "items": [
-        {
-          "productId": 1,
-          "productName": "Produto A",
-          "quantity": 2,
-          "unitPrice": 32.50
-        },
-        {
-          "productId": 2,
-          "productName": "Produto B",
-          "quantity": 1,
-          "unitPrice": 199.90
-        }
-      ],
-      "total": 264.90
+      "saleId": 2
     }
     ```
 -   **Resposta de Erro (`400 Bad Request`):** Se o produto não tiver estoque suficiente.
