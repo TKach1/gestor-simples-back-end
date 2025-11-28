@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"net/http"
 	"os"
 	"strings"
@@ -64,7 +65,7 @@ func AuthMiddleware(next http.Handler) http.Handler {
 		}
 
 		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-		if tokenString == authHeader { // No "Bearer " prefix
+		if tokenString == authHeader {
 			http.Error(w, "Invalid token format", http.StatusUnauthorized)
 			return
 		}
@@ -88,9 +89,11 @@ func AuthMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		// You can pass the claims to the next handler if needed, e.g., via context.
-		// For simplicity here, we just validate.
-		next.ServeHTTP(w, r)
+		// Pass claims to the next handler via context
+		ctx := context.WithValue(r.Context(), "user_id", claims.UserID)
+		ctx = context.WithValue(ctx, "role", claims.Role)
+		
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
@@ -98,26 +101,12 @@ func AuthMiddleware(next http.Handler) http.Handler {
 func AdminMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// This middleware MUST run AFTER AuthMiddleware.
-		// A more robust implementation would pass claims via request context
-		// instead of re-parsing the token. For this monolithic app, we'll re-parse for simplicity.
-		authHeader := r.Header.Get("Authorization")
-		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-
-		claims := &Claims{}
-		_, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
-			return jwtKey, nil
-		})
-
-		if err != nil {
-			http.Error(w, "Invalid token", http.StatusUnauthorized)
-			return
-		}
-
-		if claims.Role != "admin" {
+		role, ok := r.Context().Value("role").(string)
+		if !ok || role != "admin" {
 			http.Error(w, "Admin role required", http.StatusForbidden)
 			return
 		}
-
+		
 		next.ServeHTTP(w, r)
 	})
 }

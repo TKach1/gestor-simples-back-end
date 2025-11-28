@@ -57,3 +57,21 @@ type CreateSaleRequest struct {
 	UserID int64      `json:"userId"`
 	Items  []SaleItem `json:"items"`
 }
+
+type AdminDashboardSummary struct {
+	TotalSalesMonth  float64         `json:"totalSalesMonth"`
+	TotalSellers     int             `json:"totalSellers"`
+	LowStockProducts int             `json:"lowStockProducts"`
+	TopSellingProduct TopSellingProduct `json:"topSellingProduct"`
+}
+
+type TopSellingProduct struct {
+	ID   int64  `json:"id"`
+	Name string `json:"name"`
+}
+
+type VendedorDashboardSummary struct {
+	MyTotalSalesMonth float64 `json:"myTotalSalesMonth"`
+	MyRank            int     `json:"myRank"`
+	Commissions       float64 `json:"commissions"`
+}

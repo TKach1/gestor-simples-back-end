@@ -494,21 +494,113 @@ func createSaleHandler(w http.ResponseWriter, r *http.Request) {
 
 // --- Dashboard Handlers ---
 func getDashboardSummaryHandler(w http.ResponseWriter, r *http.Request) {
-	// This is a simplified dashboard. A real one would have more complex logic
-	// and would check the user's role from the JWT token.
+	// Get user role and ID from the context (set by AuthMiddleware)
+	role := r.Context().Value("role").(string)
+	userID := r.Context().Value("user_id").(int64)
+
+	switch role {
+	case "admin":
+		getAdminDashboardSummary(w, r)
+	case "vendedor":
+		getVendedorDashboardSummary(w, r, userID)
+	default:
+		respondWithError(w, http.StatusForbidden, "Role not recognized for dashboard summary")
+	}
+}
+
+func getAdminDashboardSummary(w http.ResponseWriter, r *http.Request) {
 	var totalSalesMonth float64
-	database.DB.QueryRow("SELECT COALESCE(SUM(p.price * si.quantity), 0) FROM sales s JOIN sales_items si ON s.id = si.sale_id JOIN products p ON si.product_id = p.id WHERE s.date >= date_trunc('month', current_date)").Scan(&totalSalesMonth)
+	err := database.DB.QueryRow(`
+		SELECT COALESCE(SUM(p.price * si.quantity), 0) 
+		FROM sales s 
+		JOIN sales_items si ON s.id = si.sale_id 
+		JOIN products p ON si.product_id = p.id 
+		WHERE s.date >= date_trunc('month', current_date)
+	`).Scan(&totalSalesMonth)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Failed to get total sales for the month")
+		return
+	}
 
 	var totalSellers int
 	database.DB.QueryRow("SELECT COUNT(*) FROM users WHERE role = 'vendedor'").Scan(&totalSellers)
-	
+
 	var lowStockProducts int
 	database.DB.QueryRow("SELECT COUNT(*) FROM products WHERE quantity < 10").Scan(&lowStockProducts)
 
-	summary := map[string]interface{}{
-		"totalSalesMonth":   totalSalesMonth,
-		"totalSellers":      totalSellers,
-		"lowStockProducts":  lowStockProducts,
+	var topSellingProduct struct {
+		ID   sql.NullInt64  `json:"id"`
+		Name sql.NullString `json:"name"`
+	}
+	err = database.DB.QueryRow(`
+		SELECT p.id, p.name
+		FROM sales_items si
+		JOIN products p ON si.product_id = p.id
+		GROUP BY p.id, p.name
+		ORDER BY SUM(si.quantity) DESC
+		LIMIT 1
+	`).Scan(&topSellingProduct.ID, &topSellingProduct.Name)
+	if err != nil && err != sql.ErrNoRows {
+		respondWithError(w, http.StatusInternalServerError, "Failed to get top selling product")
+		return
+	}
+
+	summary := models.AdminDashboardSummary{
+		TotalSalesMonth:  totalSalesMonth,
+		TotalSellers:     totalSellers,
+		LowStockProducts: lowStockProducts,
+		TopSellingProduct: models.TopSellingProduct{
+			ID:   topSellingProduct.ID.Int64,
+			Name: topSellingProduct.Name.String,
+		},
+	}
+
+	respondWithJSON(w, http.StatusOK, summary)
+}
+
+func getVendedorDashboardSummary(w http.ResponseWriter, r *http.Request, userID int64) {
+	var myTotalSalesMonth float64
+	err := database.DB.QueryRow(`
+		SELECT COALESCE(SUM(p.price * si.quantity), 0)
+		FROM sales s
+		JOIN sales_items si ON s.id = si.sale_id
+		JOIN products p ON si.product_id = p.id
+		WHERE s.user_id = $1 AND s.date >= date_trunc('month', current_date)
+	`, userID).Scan(&myTotalSalesMonth)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Failed to get user's total sales for the month")
+		return
+	}
+
+	var myRank int
+	err = database.DB.QueryRow(`
+		WITH ranked_sellers AS (
+			SELECT 
+				s.user_id,
+				RANK() OVER (ORDER BY SUM(p.price * si.quantity) DESC) as rank
+			FROM sales s
+			JOIN sales_items si ON s.id = si.sale_id
+			JOIN products p ON si.product_id = p.id
+			WHERE s.date >= date_trunc('month', current_date)
+			GROUP BY s.user_id
+		)
+		SELECT rank FROM ranked_sellers WHERE user_id = $1
+	`, userID).Scan(&myRank)
+	if err != nil && err != sql.ErrNoRows {
+		respondWithError(w, http.StatusInternalServerError, "Failed to calculate seller rank")
+		return
+	}
+    if err == sql.ErrNoRows {
+        myRank = 0 // If no sales, rank is 0 or unranked
+    }
+
+
+	commissions := myTotalSalesMonth * 0.10 // 10% commission
+
+	summary := models.VendedorDashboardSummary{
+		MyTotalSalesMonth: myTotalSalesMonth,
+		MyRank:            myRank,
+		Commissions:       commissions,
 	}
 
 	respondWithJSON(w, http.StatusOK, summary)
